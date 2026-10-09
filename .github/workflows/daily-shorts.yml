@@ -1,0 +1,101 @@
+name: Daily Turkish history Shorts
+on:
+  schedule:
+    - cron: '0 9 * * *'
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preview: robotic sample; audit-model: fetch model docs; publish: real upload'
+        type: choice
+        options: [preview, audit-model, publish]
+        default: preview
+permissions:
+  contents: write
+concurrency:
+  group: youtube-shorts-production
+  cancel-in-progress: false
+jobs:
+  video:
+    if: github.event_name == 'workflow_dispatch' || vars.AUTOMATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install media tools and Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          python -m pip install -r requirements.txt
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: Restore state and configure worker
+        run: |
+          python - <<'PY'
+          import json, pathlib, shutil, sys
+          p=pathlib.Path('.state');p.mkdir(exist_ok=True)
+          ledger=pathlib.Path('runtime/jobs.sqlite3')
+          if ledger.exists():shutil.copyfile(ledger,p/'jobs.sqlite3')
+          config=json.loads(pathlib.Path('config.example.json').read_text())
+          config['persist_command']=[sys.executable,'deploy/persist_state.py']
+          pathlib.Path('config.json').write_text(json.dumps(config))
+          PY
+      - name: Fetch official Antalia model card
+        if: inputs.mode == 'audit-model'
+        run: python automation.py audit-model
+      - name: Generate local-voice preview
+        if: inputs.mode == 'preview'
+        run: python automation.py render --episode osmanli-001 --local-preview
+      - name: Load YouTube authorization
+        if: inputs.mode == 'publish' || github.event_name == 'schedule'
+        env:
+          YOUTUBE_OAUTH_JSON: ${{ secrets.YOUTUBE_OAUTH_JSON }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          value=os.environ.get('YOUTUBE_OAUTH_JSON')
+          if not value:raise SystemExit('Missing YOUTUBE_OAUTH_JSON in repository Secrets.')
+          parsed=json.loads(value)
+          if not parsed.get('refresh_token'):raise SystemExit('OAuth refresh token missing.')
+          p=pathlib.Path('.state/token.json');p.write_text(json.dumps(parsed));p.chmod(0o600)
+          PY
+      - name: Publish with persistent duplicate protection
+        if: inputs.mode == 'publish' || github.event_name == 'schedule'
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = schedule ]; then
+            case "$SCHEDULE" in
+              '0 9 * * *') python automation.py run --scheduled-time 12:00 ;;
+              '0 16 * * *') python automation.py run --scheduled-time 19:00 ;;
+              *) exit 2 ;;
+            esac
+          else
+            python automation.py run
+          fi
+      - name: Persist final ledger
+        if: always() && (inputs.mode == 'publish' || github.event_name == 'schedule')
+        run: |
+          if [ -f .state/jobs.sqlite3 ]; then python deploy/persist_state.py; fi
+      - name: Downloadable videos and model documents
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorts-output-${{ github.run_id }}
+          path: |
+            .state/renders/**/video.mp4
+            .state/renders/**/english.srt
+            .state/model-audit/README.md
+            .state/model-audit/metadata.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove local OAuth token
+        if: always()
+        run: rm -f .state/token.json

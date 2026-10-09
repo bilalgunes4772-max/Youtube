@@ -1,0 +1,9 @@
+{
+  "timezone": "Europe/Istanbul",
+  "times": ["12:00", "19:00"],
+  "expected_handle": "@dolunay-baran",
+  "privacy": "public",
+  "queue": "content/episodes.json",
+  "state_dir": "",
+  "antalia_command": []
+}

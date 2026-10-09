@@ -1,0 +1,10 @@
+[Unit]
+Description=Two daily Shorts at 12:00 and 19:00 Istanbul
+[Timer]
+OnCalendar=*-*-* 12:00:00 Europe/Istanbul
+OnCalendar=*-*-* 19:00:00 Europe/Istanbul
+Persistent=false
+AccuracySec=1s
+Unit=youtube-shorts.service
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Turkish history Shorts generation and YouTube upload
+[Service]
+Type=oneshot
+WorkingDirectory=%h/youtube-automation
+ExecStart=%h/youtube-automation/.venv/bin/python %h/youtube-automation/automation.py run
+TimeoutStartSec=3600
+UMask=0077
