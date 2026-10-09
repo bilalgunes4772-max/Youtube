@@ -1,6 +1,6 @@
 # Dolunay Baran — Türkçe tarih Shorts otomasyonu
 
-Türkçe ses → 1080×1920 hareketli metin görselleri → İngilizce altyazı → YouTube yüklemesi. Türkiye saatiyle günde iki çalışma: **12.00 ve 19.00**. Otomasyon geliştirilmiştir; Antalia ve YouTube entegrasyonlarının canlı doğrulaması henüz tamamlanmamıştır. GitHub Actions zamanlayıcısı hazırlandı; henüz GitHub üzerinde etkin değildir. Kendi bilgisayarınız veya VPS şart değildir.
+Türkçe ses → 1080×1920 hareketli metin görselleri → İngilizce altyazı → YouTube yüklemesi. Türkiye saatiyle günde iki çalışma: **12.00 ve 19.00**. Otomasyon geliştirilmiştir; Antalia ve YouTube entegrasyonlarının canlı doğrulaması henüz tamamlanmamıştır. GitHub Actions zamanlayıcısı hazırlandı; otomatik YouTube yayını henüz etkin değildir. main dalına kod push edilmesi önizleme üretimini tetikler, YouTube yüklemesi yapmaz. Kendi bilgisayarınız veya VPS şart değildir.
 
 ## Mevcut durum
 
@@ -20,7 +20,7 @@ GitHub Actions standart çalıştırıcısı CPU kullanır. Antalia'nın GPU/RAM
 2. Actions → Daily Turkish history Shorts → Run workflow → `audit-model` ile resmi model belgelerini indirin. Çalışma tamamlanınca **Artifacts** alanından belgeleri indirebilirsiniz. Bu, model ses üretimini doğrulamaz.
 3. Antalia lisansını ve kullanımını inceleyip gerçek `antalia_command` ve gereken bağımlılıkları yapılandırın.
 4. Google OAuth bağlantısıyla üretilen token JSON'unu **Settings → Secrets and variables → Actions → Secrets** içinde `YOUTUBE_OAUTH_JSON` adıyla kaydedin. JSON içeriğini sohbete göndermeyin. Refresh token kalıcı OAuth izni gerektirir.
-5. Actions üzerinden `preview` çalışması sentetik yerel Türkçe sesli MP4 üretir. **Artifacts → shorts-output-...** ZIP dosyasını indirip MP4'ü açabilirsiniz. Bu sohbetten açılamayan dosyalar için teslim yolu budur; workflow GitHub'a yerleştirilip çalıştırılmadan gerçek indirme bağlantısı oluşmaz.
+5. main dalına kod push edilmesi veya Actions üzerinden `preview` çalışması sentetik yerel Türkçe sesli MP4 üretir. **Artifacts → shorts-output-...** ZIP dosyasını indirip MP4'ü açabilirsiniz. Bu sohbetten açılamayan dosyalar için teslim yolu budur; workflow GitHub'a yerleştirilip çalıştırılmadan gerçek indirme bağlantısı oluşmaz.
 6. Antalia üretimi, kanal izni, kaynaklar ve gerçek yükleme doğrulandıktan sonra **Variables** alanında `AUTOMATION_ENABLED=true` ayarlayın.
 
 `runtime/jobs.sqlite3` yalnızca bölüm ID, yayın aralığı, durum ve video ID içerir. Token, video veya kişisel hesap bilgisi bu kayda yazılmaz. GitHub çalıştırıcısı bu kaydı her yükleme isteğinden **önce** depoya commit/push eder; bu işlem başarısızsa YouTube'a istek göndermez. Upload tamamlandıktan sonra kayıt tekrar güncellenir. Workflow için `contents: write` gerekir; branch koruması bot push'larını engelliyorsa kalıcılık adımı durur. Aynı anda iki workflow çalışmaz. Secrets ve tokenlar artifact veya Git'e eklenmez. Kayıt dosyasını silmek tekrar yükleme riskini doğurur.
@@ -68,6 +68,28 @@ MP4 ve İngilizce SRT `.state/renders/osmanli-001/preview` altında oluşturulur
 ```
 
 Google'ın izin ekranında `@dolunay-baran` kanalını seçin. Kod kanalın handle değerini kontrol eder, yanlış kanala izin vermez. Upload ve salt okunur kanal izinleri kullanılır. Refresh token, `.state/token.json` dosyasında 0600 izinleriyle saklanır ve Git'ten dışlanır. Sunucuda çalışacaksa bu dosyayı güvenli şekilde aynı uygulamanın `.state` dizinine taşıyın; sohbet veya Git kullanmayın. OAuth uygulaması test modundayken refresh token kısa süreli olabilir; sürekli otomasyon için uygulamanın yayın durumunu ve Google kurallarını kontrol edin. Servis hesabı kişisel YouTube kanalının OAuth izninin yerine geçmez.
+
+### Sürekli açık bilgisayar olmadan ilk Google izni
+
+İlk izin işlemi için sürekli açık bilgisayar gerekmez. Masaüstü authorize komutunu bir kez güvenilir bir bilgisayarda çalıştırabilirsiniz. Yalnızca tarayıcı kullanacaksanız Google'ın resmi [OAuth Playground](https://developers.google.com/oauthplayground/) aracı alternatifidir: kendi OAuth istemcinizi kullanmanız gerekir; Playground'un varsayılan istemcisi sürekli otomasyon için uygun değildir.
+
+Google Cloud'da **Web application** OAuth istemcisi için izin verilen redirect URI `https://developers.google.com/oauthplayground` olmalıdır. Playground ayarlarında **Use your own OAuth credentials** seçilir, kendi istemci bilgileri yalnızca bu Google sayfasına girilir. `https://www.googleapis.com/auth/youtube.upload` ve `https://www.googleapis.com/auth/youtube.readonly` kapsamlarına kanal sahibi izin verir; kod tokenlarla değiştirilir. İlgili Google ekranından alınan refresh token, client ID ve client secret sadece GitHub Actions Secret'a aşağıdaki authorized-user JSON yapısında kaydedilir. Buradaki büyük harfli yer tutucular gerçek değer değildir; sohbete değer göndermeyin.
+
+```json
+{
+  "type": "authorized_user",
+  "client_id": "KENDI_OAUTH_CLIENT_ID",
+  "client_secret": "KENDI_OAUTH_CLIENT_SECRET",
+  "refresh_token": "GOOGLE_IZNINDEN_ALINAN_REFRESH_TOKEN",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "scopes": [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly"
+  ]
+}
+```
+
+Bu yöntem burada denenmedi; Google projesi ve kanal sahibi izni henüz mevcut değil. Üretim kodu ayrıca kanal handle değerini kontrol eder. Google hesap şifresini, tokenları veya OAuth istemci sırrını bu sohbete göndermeyin.
 
 API projesinin doğrulama/audit durumuna göre yüklemeler private ile sınırlanabilir; `privacy: public` ayarı tek başına herkese açık yayın garantisi değildir. Quota veya token sorununda işlem durur; hatayı bastırarak yayımlandı denmez.
 

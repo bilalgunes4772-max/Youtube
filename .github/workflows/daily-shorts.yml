@@ -1,5 +1,8 @@
 name: Daily Turkish history Shorts
 on:
+  push:
+    branches: [main]
+    paths-ignore: ['runtime/**']
   schedule:
     - cron: '0 9 * * *'
     - cron: '0 16 * * *'
@@ -17,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   video:
-    if: github.event_name == 'workflow_dispatch' || vars.AUTOMATION_ENABLED == 'true'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || vars.AUTOMATION_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -50,7 +53,7 @@ jobs:
         if: inputs.mode == 'audit-model'
         run: python automation.py audit-model
       - name: Generate local-voice preview
-        if: inputs.mode == 'preview'
+        if: inputs.mode == 'preview' || github.event_name == 'push'
         run: python automation.py render --episode osmanli-001 --local-preview
       - name: Load YouTube authorization
         if: inputs.mode == 'publish' || github.event_name == 'schedule'
